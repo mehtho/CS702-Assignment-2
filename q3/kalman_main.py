@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from kalman_filter import KalmanFilter  # Importing the KalmanFilter class from kalman_filter.py
+from kalman_filter import KalmanFilter
+from plot import plot_trajectory
 
 # Load fingertip tracking data
 data = pd.read_csv("./q3/txys_missingdata.csv")
@@ -34,23 +35,13 @@ plt.figure(figsize=(12, 6))
 
 # Original trajectory
 plt.subplot(1, 2, 1)
-plt.scatter(data['x_px'], data['y_px'], color='red')
-plt.title('Original Fingertip Trajectory')
-plt.xlabel('X coordinate (pixels)')
-plt.ylabel('Y coordinate (pixels)')
-plt.gca().invert_yaxis()  # Invert y-axis to match the desired coordinate system
-plt.grid(True)
+plot_trajectory(data['x_px'], data['y_px'], 'Original Fingertip Trajectory')
 
 # Trajectory after Kalman filter
 plt.subplot(1, 2, 2)
 x_coordinates = [point[0] for point in filtered_trajectory]
 y_coordinates = [point[1] for point in filtered_trajectory]
-plt.scatter(x_coordinates, y_coordinates, color='blue')
-plt.title('Fingertip Trajectory after Kalman Filter')
-plt.xlabel('X coordinate (pixels)')
-plt.ylabel('Y coordinate (pixels)')
-plt.gca().invert_yaxis()  # Invert y-axis to match the desired coordinate system
-plt.grid(True)
+plot_trajectory(x_coordinates, y_coordinates, 'Fingertip Trajectory After Kalman Filter')
 
 plt.tight_layout()
 plt.show()
