@@ -5,7 +5,7 @@ from kalman_filter import KalmanFilter
 from plot import plot_trajectory
 
 # Load fingertip tracking data
-data = pd.read_csv("./q3/txys_missingdata.csv")
+data = pd.read_csv("./q3/txys_missingdata_padded.csv")
 
 # Create a KalmanFilter object
 kalman_filter = KalmanFilter()
@@ -18,11 +18,12 @@ P = np.eye(4)
 filtered_trajectory = []
 for i in range(len(data)):
     # Prediction
-    x_hat_minus, P_minus = kalman_filter.predict(x_hat)
+    x_hat = kalman_filter.predict(x_hat)
     
-    # Update
-    z = np.array([data['x_px'][i], data['y_px'][i]])
-    x_hat, P = kalman_filter.update(x_hat_minus, P_minus, z)
+    # Update if there is a measurement
+    if not np.isnan(data['x_px'][i]):
+        z = np.array([data['x_px'][i], data['y_px'][i]])
+        x_hat = kalman_filter.update(x_hat, z)
     
     filtered_trajectory.append((x_hat[0], x_hat[2]))
 

@@ -25,13 +25,13 @@ class KalmanFilter:
 
     def predict(self, x_hat: np.ndarray) -> np.ndarray:
         """Predict the next state."""
-        x_hat_minus = self.A @ x_hat
-        P_minus = self.A @ self.P @ self.A.T + self.Q
-        return x_hat_minus, P_minus
+        x_hat_new = self.A @ x_hat
+        self.P = self.A @ self.P @ self.A.T + self.Q
+        return x_hat_new
 
-    def update(self, x_hat_minus: np.ndarray, P_minus: np.ndarray, z: np.ndarray) -> np.ndarray:
+    def update(self, x_hat: np.ndarray, z: np.ndarray) -> np.ndarray:
         """Update the state estimate based on the measurement."""
-        K = self.kalman_gain(P_minus, self.C, self.R)
-        x_hat = x_hat_minus + K @ (z - self.C @ x_hat_minus)
-        P = (np.eye(len(x_hat)) - K @ self.C) @ P_minus
-        return x_hat, P
+        K = self.kalman_gain(self.P, self.C, self.R)
+        x_hat_new = x_hat + K @ (z - self.C @ x_hat)
+        self.P = (np.eye(len(x_hat_new)) - K @ self.C) @ self.P
+        return x_hat_new
