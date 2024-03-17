@@ -27,9 +27,9 @@ for i in range(len(data)):
     
     filtered_trajectory.append((x_hat[0], x_hat[2]))
 
-# # Save filtered trajectory points to CSV file
-# filtered_trajectory_df = pd.DataFrame(filtered_trajectory, columns=['x', 'y'])
-# filtered_trajectory_df.to_csv('./q3/filtered_trajectory.csv', index=False)
+# Save filtered trajectory points to CSV file
+filtered_trajectory_df = pd.DataFrame(filtered_trajectory, columns=['x', 'y'])
+filtered_trajectory_df.to_csv('./q3/filtered_trajectory.csv', index=False)
 
 # Plot both original and filtered trajectories
 plt.figure(figsize=(12, 6))
