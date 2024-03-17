@@ -2,47 +2,44 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from kalman_filter import KalmanFilter
-from plot import plot_trajectory
 
-# Load fingertip tracking data
 data = pd.read_csv("./q3/txys_missingdata_padded.csv")
 
-# Create a KalmanFilter object
 kalman_filter = KalmanFilter()
 
-# Initialize state and covariance matrices
-x_hat = np.array([data['x_px'][0], 0, data['y_px'][0], 0])
-P = np.eye(4)
-
 # Kalman filter
-filtered_trajectory = []
-for i in range(len(data)):
-    # Prediction
-    x_hat = kalman_filter.predict(x_hat)
-    
-    # Update if there is a measurement
-    if not np.isnan(data['x_px'][i]):
-        z = np.array([data['x_px'][i], data['y_px'][i]])
-        x_hat = kalman_filter.update(x_hat, z)
-    
-    filtered_trajectory.append((x_hat[0], x_hat[2]))
+x_meas = kalman_filter.filter(data)
+filtered_trajectory = x_meas[:, :, [0, 2]]  # Pick (x, y)
 
-# Save filtered trajectory points to CSV file
-filtered_trajectory_df = pd.DataFrame(filtered_trajectory, columns=['x', 'y'])
-filtered_trajectory_df.to_csv('./q3/filtered_trajectory.csv', index=False)
+# Save file
+np.savez('./q3/filtered_trajectory.npz', filtered_trajectory=filtered_trajectory)
 
-# Plot both original and filtered trajectories
-plt.figure(figsize=(12, 6))
+# Plot
+plt.style.use("seaborn-v0_8")
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 6))
 
 # Original trajectory
-plt.subplot(1, 2, 1)
-plot_trajectory(data['x_px'], data['y_px'], 'Original Fingertip Trajectory')
+ax[0].scatter(data['x_px'], data['y_px'], color='blue')
+ax[0].set_title('Original Fingertip Trajectory')
+ax[0].set_xlabel('X coordinate (pixels)')
+ax[0].set_ylabel('Y coordinate (pixels)')
+ax[0].set_xlim(right=1920) 
+ax[0].set_ylim(top=1080)
+ax[0].invert_yaxis()  # The origin is at the top-left corner
+ax[0].grid(True)
 
 # Trajectory after Kalman filter
-plt.subplot(1, 2, 2)
-x_coordinates = [point[0] for point in filtered_trajectory]
-y_coordinates = [point[1] for point in filtered_trajectory]
-plot_trajectory(x_coordinates, y_coordinates, 'Fingertip Trajectory After Kalman Filter')
+for i in range(len(x_meas)):
+    ax[1].scatter(x_meas[i, :, 0], x_meas[i, :, 1], s=5, alpha=0.3)
+
+ax[1].set_title('Fingertip Trajectory After Kalman Filter')
+ax[1].set_xlabel('X coordinate (pixels)')
+ax[1].set_ylabel('Y coordinate (pixels)')
+ax[1].set_xlim(right=1920) 
+ax[1].set_ylim(top=1080)
+ax[1].invert_yaxis()  # The origin is at the top-left corner
+ax[1].grid(True)
 
 plt.tight_layout()
 plt.show()
