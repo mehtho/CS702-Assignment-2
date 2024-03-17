@@ -4,16 +4,16 @@ from scipy import linalg as la
 
 class KalmanFilter:
     def __init__(self):
-        dt = 1.
-        R_var = 1
-        Q_var = 0.1
+        dt = 0.1
+        R_var = 5
+        Q_var = 5
         self.A = np.array([[1., dt, 0, 0], 
                            [0, 1., 0, 0],
                            [0, 0, 1., dt],
                            [0, 0, 0, 1.]])
         self.C = np.array([[1., 0, 0, 0],
                            [0, 0, 1., 0]])
-        self.P = np.diag([0.5, 0.1] * 2)  # covariance matrix for the state estimate
+        self.P = np.diag([10, 5] * 2)  # covariance matrix for the state estimate
         self.Q = np.diag([Q_var] * 4)  # covariance matrix for the process disturbance
         self.R = np.array([[R_var]])  # covariance matrix for the measurement noise
 
