@@ -4,8 +4,6 @@ import numpy as np
 from scipy.stats import multivariate_normal
 from dataclasses import dataclass
 
-FRAME_RATE = 10
-
 def scale_coordinates(x, y, ori_size=(1920, 1080), down_size=(1280, 720)):
     scale_x = down_size[0] / ori_size[0]
     scale_y = down_size[1] / ori_size[1]
@@ -18,17 +16,17 @@ class Particle:
     x: np.ndarray
     weight: float
 
-
 def calc_input() -> np.ndarray:
-    return np.array([[-15, 5]]).T
+    return np.array([[-75, 15]]).T
 
-def motion_model(x, u):
-    x[0, 0]  = x[0, 0] + u[0, 0]
-    x[1, 0]  = x[1, 0] + u[1, 0]
+def motion_model(x, u, fps=10):
+    A = np.array([[1, 0], [0, 1]])
+    B = np.array([[1, 0], [0, 1]])
+    x = np.dot(A, x) + (1 / fps) * np.dot(B, u)
     return x
 
-def noised_input(u: np.ndarray, fps=FRAME_RATE) -> np.ndarray:
-    d_vv, d_vw, d_wv, d_ww, = 5.0, 0.3, 3, 2.0
+def noised_input(u: np.ndarray, fps=10) -> np.ndarray:
+    d_vv, d_vw, d_wv, d_ww, = 10., 5., 5., 10.
     cov = np.diag([d_vv ** 2, d_vw ** 2, d_wv ** 2, d_ww ** 2])
     pdf = multivariate_normal(cov=cov)
     noise = pdf.rvs()
@@ -37,19 +35,10 @@ def noised_input(u: np.ndarray, fps=FRAME_RATE) -> np.ndarray:
     uw = u[1, 0] + noise[2] * np.sqrt(np.abs(u[0, 0]) / fps) + noise[3] * np.sqrt(np.abs(u[1, 0]) / fps)
     return np.array([[uv, uw]]).T
 
-
-def observe(x: np.ndarray, l: np.ndarray):
-    dx = l[0, 0] - x[0, 0]
-    dy = l[1, 0] - x[1, 0]
-    l = np.linalg.norm([dx, dy])
-    phi = np.arctan2(dy, dx)
-    return l, phi
-
-
 def likelihood(observation: np.ndarray, estimation: np.ndarray, std_dev=1.0):
-    distance = np.sqrt((estimation[0, 0] - observation[0, 0]) ** 2 + (estimation[1, 0] - observation[1, 0]) ** 2)
-    return multivariate_normal.pdf(distance, mean=0, cov=std_dev**2)
-
+    cov = np.diag([std_dev ** 2, std_dev ** 2])
+    dist = multivariate_normal(mean=estimation.flatten(), cov=cov)
+    return dist.pdf(observation.flatten())
 
 def resample(particles: [Particle]) -> [Particle]:
     _particles = list(filter(lambda p: p.weight > 0.01, particles))
@@ -65,18 +54,16 @@ def resample(particles: [Particle]) -> [Particle]:
 
 
 def main():
-    x = np.array([[1650*2/3, 657*2/3]]).T
+    df = pd.read_csv("./q3/txys_missingdata.csv")
+    x_init = scale_coordinates(df['x_px'][0], df['y_px'][0])
+    x = np.array(x_init).reshape(2, 1)
     particles = [Particle(np.copy(x), 1 / NP) for i in range(NP)]
 
     VideoCap = cv2.VideoCapture('./q3/hand_tracking_output.MOV')
     ControlSpeedVar = 50  #Lowest: 1 - Highest:100
     HiSpeed = 100    
-    
-    df = pd.read_csv("./q3/txys_missingdata.csv")
 
-    old_centers = []
     while(True):
-        centers = []
         # Read frame
         ret, frame = VideoCap.read()
      
@@ -86,30 +73,30 @@ def main():
         filtered_rows = df[df["t_ms"] == current_frame_index]
 
         if not filtered_rows.empty:
-            centers.append(np.array([[int(filtered_rows.x_px)], [int(filtered_rows.y_px)]]))            
-            old_centers = centers
+            loc = np.array([[int(filtered_rows.x_px)], [int(filtered_rows.y_px)]]).reshape(2, 1)
+            # loc.append(np.array([[int(filtered_rows.x_px)], [int(filtered_rows.y_px)]]))            
+            # old_loc = loc
 
-        if (len(centers) > 0):
+        if (len(loc) > 0):
             # Draw the detected circle
-            scaled_x, scaled_y = scale_coordinates(int(centers[0][0]),int(centers[0][1]))
-
+            # scaled_x, scaled_y = scale_coordinates(int(loc[0][0]),int(loc[0][1]))
+            scaled_x, scaled_y = scale_coordinates(loc[0, 0], loc[1, 0])
             cv2.circle(frame, (scaled_x, scaled_y), 10, (0, 191, 255), 2)
-            x = np.array([[scaled_x, scaled_y]]).T
-            x_new = np.array([[scaled_x, scaled_y]]).T
-            x = x_new
+            x = np.array([[scaled_x, scaled_y]]).reshape(2, 1)
 
         # Move the particles
-        particles_new = []
-        for particle in particles:
-            px = particle.x
-            pu = calc_input()
-            pu = noised_input(pu)
-            px_new = motion_model(px, pu)
-            particles_new.append(Particle(px_new, particle.weight))
-        particles = particles_new
+        if True:
+            particles_new = []
+            for particle in particles:
+                px = particle.x
+                pu = calc_input()
+                pu = noised_input(pu)
+                px_new = motion_model(px, pu)
+                particles_new.append(Particle(px_new, particle.weight))
+            particles = particles_new
 
         # Observation
-        if (len(centers) > 0):
+        if (len(loc) > 0):
             observation = x
 
             for particle in particles:
