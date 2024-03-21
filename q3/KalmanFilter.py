@@ -8,10 +8,6 @@ class KalmanFilter(object):
                             [0, 1, 0, self.dt],
                             [0, 0, 1, 0],
                             [0, 0, 0, 1]])
-        # self.B = np.array([[(self.dt**2)/2, 0],
-        #                     [0,(self.dt**2)/2],
-        #                     [self.dt,0],
-        #                     [0,self.dt]])
         self.C = np.array([[1, 0, 0, 0],
                             [0, 1, 0, 0]])
         self.Q = np.array([[(self.dt**4)/4, 0, (self.dt**3)/2, 0],
