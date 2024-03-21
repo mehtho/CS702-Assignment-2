@@ -76,6 +76,7 @@ def main():
             loc = np.array([[int(filtered_rows.x_px)], [int(filtered_rows.y_px)]]).reshape(2, 1)
 
         if (len(loc) > 0):
+            x_old = x
             scaled_x, scaled_y = scale_coordinates(loc[0, 0], loc[1, 0])
             x = np.array([[scaled_x, scaled_y]]).reshape(2, 1)
 
@@ -84,7 +85,10 @@ def main():
             particles_new = []
             for particle in particles:
                 px = particle.x
-                pu = calc_input()
+                if not filtered_rows.empty:
+                    pu = (x - x_old) * 10
+                else:
+                    pu = calc_input()
                 pu = noised_input(pu)
                 px_new = motion_model(px, pu)
                 particles_new.append(Particle(px_new, particle.weight))
