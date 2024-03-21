@@ -1,7 +1,7 @@
 import numpy as np
 
 class KalmanFilter(object):
-    def __init__(self, dt, std_acc, x_std_meas, y_std_meas):
+    def __init__(self, dt, std):
         self.dt = dt
         self.x = np.array([[0], [0], [0], [0]])
         self.A = np.array([[1, 0, self.dt, 0],
@@ -10,12 +10,12 @@ class KalmanFilter(object):
                             [0, 0, 0, 1]])
         self.C = np.array([[1, 0, 0, 0],
                             [0, 1, 0, 0]])
-        self.Q = np.array([[(self.dt**4)/4, 0, (self.dt**3)/2, 0],
-                            [0, (self.dt**4)/4, 0, (self.dt**3)/2],
-                            [(self.dt**3)/2, 0, self.dt**2, 0],
-                            [0, (self.dt**3)/2, 0, self.dt**2]]) * std_acc**2
-        self.R = np.array([[x_std_meas**2,0],
-                           [0, y_std_meas**2]])
+        self.Q = np.array([[(self.dt)/4, 0, (self.dt)/4, 0],
+                            [0, (self.dt)/4, 0, (self.dt)/4],
+                            [.5, 0, .5, 0],
+                            [0, .5, 0, .5]])
+        self.R = np.array([[std, 0],
+                           [0, std]])
         self.P = np.eye(self.A.shape[1])
 
     def predict(self):

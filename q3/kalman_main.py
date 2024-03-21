@@ -16,7 +16,7 @@ def main():
     ControlSpeedVar = 50  #Lowest: 1 - Highest:100
     HiSpeed = 100
 
-    KF = KalmanFilter(dt=0.1, std_acc=1, x_std_meas=0.1, y_std_meas=0.1)
+    KF = KalmanFilter(dt=0.1, std=0.1)
 
     old_loc = []
     while(True):
