@@ -74,14 +74,9 @@ def main():
 
         if not filtered_rows.empty:
             loc = np.array([[int(filtered_rows.x_px)], [int(filtered_rows.y_px)]]).reshape(2, 1)
-            # loc.append(np.array([[int(filtered_rows.x_px)], [int(filtered_rows.y_px)]]))            
-            # old_loc = loc
 
         if (len(loc) > 0):
-            # Draw the detected circle
-            # scaled_x, scaled_y = scale_coordinates(int(loc[0][0]),int(loc[0][1]))
             scaled_x, scaled_y = scale_coordinates(loc[0, 0], loc[1, 0])
-            cv2.circle(frame, (scaled_x, scaled_y), 10, (0, 191, 255), 2)
             x = np.array([[scaled_x, scaled_y]]).reshape(2, 1)
 
         # Move the particles
@@ -113,10 +108,7 @@ def main():
         particles = resample(particles)
 
         for particle in particles:
-            cv2.circle(frame, (int(particle.x[0, 0]), int(particle.x[1, 0])), 10, (229, 208, 12), 2)
-
-        cx, cy = x[0, 0], x[1, 0]
-        cv2.circle(frame, (int(cx), int(cy)), 10, (240, 240, 240), 2)
+            cv2.circle(frame, (int(particle.x[0, 0]), int(particle.x[1, 0])), 10, (255, 255, 255), 2)
 
         cv2.imshow('image', frame)
 
