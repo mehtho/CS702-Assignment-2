@@ -1,81 +1,211 @@
+import numpy as np
 import pygame
 import random
 import copy
-import numpy as np
-from scipy.optimize import minimize
-
+from dataclasses import dataclass
+from pyomo.environ import *
+from pyomo.dae import *
 
 pygame.init()
-SCREEN_WIDTH, SCREEN_HEIGHT = 400, 600
+SCREEN_WIDTH = 400
+SCREEN_HEIGHT = 600
+WHITE = (240, 240, 240)
+GREEN = (0, 200, 0)
+
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+transform = lambda x, y: (x, SCREEN_HEIGHT - y)
 
 
-FLAP_DURATION = 10  
-PREDICTION_HORIZON = 10  
-
-
+@dataclass
 class Bird:
-    def __init__(self, x, y, vy):
-        self.x = x
-        self.y = y
-        self.vy = vy
-        self.w = 20
-        self.h = 20
+    x: float
+    y: float
+    vx: float
+    vy: float
+    w: float = 20
+    h: float = 20
 
 
+def bird_motion(bird: Bird, u: float, dt: float, gravity: float = -50) -> Bird:
+    """Updates the bird's y position and velocity."""
+    new_bird = copy.deepcopy(bird)
+    new_bird.y = bird.y + bird.vy * dt
+    new_bird.vy = bird.vy + (u + gravity) * dt
+    return new_bird
+
+@dataclass
 class Pipe:
-    def __init__(self, x, h):
-        self.x = x
-        self.h = h
-        self.w = 70
-        self.gap = 200
+    x: float
+    h: float
+    w: float = 70
+    gap: float = 200
 
 
-def cost_function(action, bird, pipe):
-    future_bird = copy.deepcopy(bird)
-    for _ in range(PREDICTION_HORIZON):
-        future_bird.vy += action * 15 - 9.8
-        future_bird.y += future_bird.vy
-        if future_bird.y > SCREEN_HEIGHT or future_bird.y < 0:
-            return float('inf')
-    return abs(pipe.h + pipe.gap / 2 - future_bird.y) 
+def pipe_motion(pipe: Pipe, vx: float, dt: float) -> (Pipe, int):
+    """Updates the pipe"""
+    new_pipe = copy.deepcopy(pipe)
+    new_pipe.x -= vx * dt
+
+    d_score = 0
+    if new_pipe.x < -pipe.w:
+        new_pipe.x = SCREEN_WIDTH
+        new_pipe.h = random.randint(200, 300)
+        d_score = 1
+    return new_pipe, d_score
 
 
-def model_predictive_control(bird, pipe):
-    initial_guess = np.zeros(PREDICTION_HORIZON)
-    result = minimize(cost_function, initial_guess, args=(bird, pipe))
-    return result.x[0]
+def calculate_the_control_signal(bird: Bird, pipe: Pipe, k: int):
+    sp = pipe.h + pipe.gap / 2
+    pv = bird.y - bird.h / 2
+    if bird.x > pipe.x + pipe.w:    
+        sp = SCREEN_HEIGHT / 2    
+    u_jump = pid.calc_input(sp, pv)
+    return u_jump
 
 
-# Main game loop
-def main():
+@dataclass
+class MPCController:
+    dt = 1 / 80              # time step
+    gravity = -50            # gravity constant
+    horizon = 15
+    bird_h = 20
+    nfe = 100
+
+    def __init__(self):
+        self.prev_v = 0
+        self.prev_y = 300
+
+    def get_reference_trajectory(self):
+        pv_target = self.pv + np.arange(0, 1, 1 / self.horizon) * (self.sp - self.pv)
+        return pv_target
+
+    def create_model(self):
+        ref = self.get_reference_trajectory()
+        m = ConcreteModel()
+        DT = self.horizon * self.dt
+        m.t = ContinuousSet(bounds=(0, DT))
+        m.u = Var(m.t)
+        m.v = Var(m.t)
+        m.y = Var(m.t)
+        m.dvdt = DerivativeVar(m.v, wrt=m.t)
+        m.dydt = DerivativeVar(m.y, wrt=m.t)
+        m.c1 = Constraint(m.t, rule=lambda m, t: m.dvdt[t] == m.u[t] + self.gravity)
+        m.c2 = Constraint(m.t, rule=lambda m, t: m.dydt[t] == m.v[t])
+
+        m.v[m.t.first()].fix(self.prev_v)
+        m.y[m.t.first()].fix(self.prev_y)
+
+        def integral(m, t):
+            indices = np.arange(self.horizon)
+            pv_target = np.interp(t / self.dt, indices, ref)
+            pv_current = m.y[t] - self.bird_h / 2
+            obj = (pv_current - pv_target) ** 2
+            return obj
+        
+        m.integral = Integral(m.t, wrt=m.t, rule=integral)    
+        m.obj = Objective(expr=m.integral, sense=minimize)
+        return m
+
+    def predict_value(self, m, data):
+        t_bar = np.array([value(t) for t in m.t])
+        u_bar = np.array([value(data[t]) for t in m.t])
+        u_params = np.polyfit(t_bar, u_bar, 2)
+        u = np.polyval(u_params, dt)
+        return u
+
+    def calc_input(self, sp, pv):
+        self.sp = sp
+        self.pv = pv
+        m = self.create_model()
+        discretizer = TransformationFactory("dae.finite_difference")
+        discretizer.apply_to(m, nfe=self.nfe, wrt=m.t, scheme="BACKWARD")
+        solver = SolverFactory("ipopt")
+        solver.solve(m, tee=False)
+        u = self.predict_value(m, m.u)
+        v = self.predict_value(m, m.v)
+        y = self.predict_value(m, m.y)
+        self.prev_v = v
+        self.prev_y = y
+        return u
+
+pid = MPCController()
+
+
+if __name__ == "__main__":
+
+    bird = Bird(50, 300, 30, 0)
+    x, y = transform(bird.x, bird.y)
+    bird_rect = pygame.Rect(x, y, bird.w, bird.h)
+
+    pipe_height = random.randint(50, 100)
+    pipe = Pipe(SCREEN_WIDTH - 50, pipe_height)
+
+    x, h = transform(pipe.x, pipe.h)
+    bottom_pipe_rect = pygame.Rect(x, 0, pipe.w, h)
+
+    x, y = transform(pipe.x, pipe.h + pipe.gap)
+    top_pipe_rect = pygame.Rect(x, y, pipe.w, SCREEN_HEIGHT - y)
+
+    # Clock
     clock = pygame.time.Clock()
-    bird = Bird(50, random.randint(100, SCREEN_HEIGHT - 100), 0)  # Initialize bird at a random position
-    pipe = Pipe(SCREEN_WIDTH - 50, random.randint(200, 300))
-
     running = True
+    fps = 30
+    dt = 1 / fps
+
+    score = 0
+    k = 0  # Time step
     while running:
+        screen.fill(WHITE)
+
+        # Handle events.
+        u_jump = 0
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    u_jump = 500
 
-        # Perform MPC to get control signal
-        control_signal = model_predictive_control(bird, pipe)
+        # Calculate the control signal
+        u_jump = calculate_the_control_signal(bird, pipe, k)
 
-        # Update bird position
-        bird.vy += control_signal * 15 - 9.8
-        bird.y += bird.vy
+        # Bird dynamics
+        bird = bird_motion(bird, u_jump, dt)
+        x, y = transform(bird.x, bird.y)
+        bird_rect.y = y
 
-        # Drawing
-        screen.fill((255, 255, 255)) 
-        pygame.draw.rect(screen, (255, 0, 0), pygame.Rect(bird.x, bird.y, bird.w, bird.h))  # Draw bird
-        pygame.draw.rect(screen, (0, 255, 0), pygame.Rect(pipe.x, 0, pipe.w, pipe.h))  # Draw bottom pipe
-        pygame.draw.rect(screen, (0, 255, 0), pygame.Rect(pipe.x, pipe.h + pipe.gap, pipe.w, SCREEN_HEIGHT - (pipe.h + pipe.gap)))  # Draw top pipe
+        # Pipe dynamics
+        pipe, d_score = pipe_motion(pipe, bird.vx, dt)
+        x, y = transform(pipe.x, pipe.h)
+        bottom_pipe_rect = pygame.Rect(x, y, pipe.w, pipe.h)
+        top_pipe_rect = pygame.Rect(x, 0, pipe.w, SCREEN_HEIGHT - pipe.h - pipe.gap)
 
-        pygame.display.flip()  
-        clock.tick(30)  
+        # Update the score and bird velocity
+        score += d_score
+        bird.vx += d_score * 10
+
+        # Draw bird and pipes
+        pygame.draw.rect(screen, GREEN, bird_rect)
+        pygame.draw.rect(screen, GREEN, bottom_pipe_rect)
+        pygame.draw.rect(screen, GREEN, top_pipe_rect)
+
+        # Draw the score
+        font = pygame.font.Font(None, 36)
+        text = font.render(f"Score: {score}", True, (0, 0, 0))
+        screen.blit(text, (10, 10))
+
+        # Collision detection
+        if bird_rect.colliderect(bottom_pipe_rect) or \
+                bird_rect.colliderect(top_pipe_rect) or \
+                bird.y + bird.h > 1.5 * SCREEN_HEIGHT or \
+                bird.y < -0.5 * SCREEN_HEIGHT:
+            running = False
+
+        # Update the display
+        pygame.display.update()
+        clock.tick(fps)
+
+        k += 1  # Increment time step
 
     pygame.quit()
 
-if __name__ == "__main__":
-    main()
