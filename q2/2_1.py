@@ -6,9 +6,13 @@ import cv2
 import numpy as np
 
 pygame.init()
-SCREEN_WIDTH, SCREEN_HEIGHT = 400, 600
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+SCREEN_WIDTH = 400
+SCREEN_HEIGHT = 600
+WHITE = (240, 240, 240)
+GREEN = (0, 200, 0)
 
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+transform = lambda x, y: (x, SCREEN_HEIGHT - y)
 @dataclass
 class Bird:
     x: float
@@ -24,9 +28,6 @@ class Pipe:
     h: float
     w: float = 70
     gap: float = 200
-
-import numpy as np
-from dataclasses import dataclass
 
 
 @dataclass
@@ -53,12 +54,14 @@ class PIDController:
         self.prev_u = u
         return v
     
+
 def bird_motion(bird: Bird, u: float, dt: float, gravity: float = -50) -> Bird:
     """Updates the bird's y position and velocity."""
     new_bird = copy.deepcopy(bird)
     new_bird.y = bird.y + bird.vy * dt
     new_bird.vy = bird.vy + (u + gravity) * dt
     return new_bird
+
 
 def pipe_motion(pipe: Pipe, vx: float, dt: float) -> (Pipe, int):
     """Updates the pipe"""
@@ -71,6 +74,7 @@ def pipe_motion(pipe: Pipe, vx: float, dt: float) -> (Pipe, int):
         d_score = 1
     return new_pipe, d_score
 
+
 def calculate_the_control_signal(bird: Bird, pipe: Pipe, pid_controller: PIDController) -> int:
     """Calculate the control signal for the bird."""
     sp = pipe.h + pipe.gap / 2
@@ -79,14 +83,31 @@ def calculate_the_control_signal(bird: Bird, pipe: Pipe, pid_controller: PIDCont
     return u_jump
 
 
-def main():
-    clock = pygame.time.Clock()
-    bird = Bird(50, 300, 0, 0)
-    pipe = Pipe(SCREEN_WIDTH - 50, random.randint(200, 300))
-    pid_controller = PIDController()
+pid_controller = PIDController()
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter('gameplay.mp4', fourcc, 30.0, (SCREEN_WIDTH, SCREEN_HEIGHT))
+
+def main():
+
+    bird = Bird(50, 300, 30, 0)
+    x, y = transform(bird.x, bird.y)
+    bird_rect = pygame.Rect(x, y, bird.w, bird.h)
+
+    pipe_height = random.randint(50, 100)
+    pipe = Pipe(SCREEN_WIDTH - 50, pipe_height)
+
+    x, h = transform(pipe.x, pipe.h)
+    bottom_pipe_rect = pygame.Rect(x, 0, pipe.w, h)
+
+    x, y = transform(pipe.x, pipe.h + pipe.gap)
+    top_pipe_rect = pygame.Rect(x, y, pipe.w, SCREEN_HEIGHT - y)
+
+    clock = pygame.time.Clock()
+    running = True
+    fps = 30
+    dt = 1 / fps
+
+    score = 0
+    k = 0  
 
     running = True
     while running:
@@ -97,15 +118,23 @@ def main():
         u_jump = calculate_the_control_signal(bird, pipe, pid_controller)
         bird = bird_motion(bird, u_jump, 1 / 30)  # Assuming 30 fps
         pipe, d_score = pipe_motion(pipe, bird.vx, 1 / 30)
+        score += d_score
+        bird.vx += d_score * 10
+
+        pygame.draw.rect(screen, GREEN, bird_rect)
+        pygame.draw.rect(screen, GREEN, bottom_pipe_rect)
+        pygame.draw.rect(screen, GREEN, top_pipe_rect)
+        font = pygame.font.Font(None, 36)
+        text = font.render(f"Score: {score}", True, (0, 0, 0))
+        screen.blit(text, (10, 10))
 
         # Check for collision with pipes or out of bounds
         if bird.y > SCREEN_HEIGHT or bird.y < 0 or \
            (bird.x + bird.w > pipe.x and bird.x < pipe.x + pipe.w and \
            (bird.y < pipe.h or bird.y + bird.h > pipe.h + pipe.gap)):
             print("Game over")
-            running = False  # End the game if collision occurs
+            running = False  
 
-        # Drawing
         screen.fill((255, 255, 255))
         pygame.draw.rect(screen, (255, 0, 0), pygame.Rect(bird.x, bird.y, bird.w, bird.h))
         pygame.draw.rect(screen, (0, 255, 0), pygame.Rect(pipe.x, 0, pipe.w, pipe.h))
@@ -116,11 +145,10 @@ def main():
         frame = pygame.surfarray.array3d(screen)
         frame = np.flip(frame, axis=0)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        out.write(frame)
+        pygame.display.update()
 
         clock.tick(30)
 
-    out.release()
     pygame.quit()
 
 
